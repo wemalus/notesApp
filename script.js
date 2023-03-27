@@ -12,7 +12,64 @@ const addBox = document.querySelector(".add-box"),
     addBtn = popupBox.querySelector("button");
 const months = ["Січень", "Лютий", "Березень", "Квітень", "Травень", "Червень", "Липень",
     "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень"];
-const notes = JSON.parse(localStorage.getItem("notes") || "[]");
+let notes = [];
+
+// Retrieve notes data from server
+function fetchNotes() {
+    const response = fetch("https://localhost:7229/notes")
+        .then(response => response.json())
+        .then(data => {
+            notes = data;
+            showNotes();
+        })
+}
+// Save note data to server
+function saveNoteData(data) {
+    const response = fetch("https://localhost:7229/notes", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+    })
+    .then(response => response.json())
+        .then(data => {
+            notes.push(data);
+            showNotes();
+        });
+}
+
+// Update note data on server
+function updateNoteData(index, data) {
+    let correctId = notes[index].id;
+
+    data.id = correctId;
+    fetch(`https://localhost:7229/notes/{id}?id=${correctId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+        .then(response => response.json())
+        .then(data => {
+            data.id = correctId;
+            notes[index] = data;
+            showNotes();
+        })
+        .catch(error => console.error(error));
+}
+
+// Delete note data from server
+function deleteNoteData(id) {
+    let correctId = notes[id].id;
+    fetch(`https://localhost:7229/notes/{id}?id=${correctId}`, {
+        method: 'DELETE'
+    })
+        .then(response => {
+            notes.splice(id, 1);
+            showNotes();
+        })
+        .catch(error => console.error(error));
+}
 let isUpdate = false, updateId;
 addBox.addEventListener("click", () => {
     popupTitle.innerText = "Додати нову нотатку";
@@ -21,6 +78,7 @@ addBox.addEventListener("click", () => {
     document.querySelector("body").style.overflow = "hidden";
     if (window.innerWidth > 660) titleTag.focus();
 });
+
 var sortedDate = 0;
 var sortedTitle = 0;
 sortBoxDate.addEventListener("click", () => {
@@ -29,20 +87,18 @@ sortBoxDate.addEventListener("click", () => {
     if (sortedDate == 1) {
         sortedTitle = 0;
         sortedDate = 0;
-        list = JSON.parse(localStorage.getItem("notes") || "[]");
     }
     else {
         sortedTitle = 0;
         sortedDate = 1;
-        list = list = JSON.parse(localStorage.getItem("notes") || "[]").reverse();
+        notes = notes.reverse();
     }
     showNotes(list);
 });
 sortBoxTitle.addEventListener("click", () => {
     inputBox.value = "";
     updateSearch("");
-    list = JSON.parse(localStorage.getItem("notes") || "[]");;
-    list = quickSort(list, 0, list.length - 1);
+    notes = quickSort(notes, 0, notes.length - 1);
     if (sortedTitle == 1) {
         sortedTitle = 0;
         sortedDate = 0;
@@ -50,9 +106,9 @@ sortBoxTitle.addEventListener("click", () => {
     else {
         sortedTitle = 1;
         sortedDate = 0;
-        list = list.reverse();
+        notes = notes.reverse();
     }
-    showNotes(list);
+    showNotes();
 });
 function swap(items, leftIndex, rightIndex) {
     var temp = items[leftIndex];
@@ -60,9 +116,9 @@ function swap(items, leftIndex, rightIndex) {
     items[rightIndex] = temp;
 }
 function partition(items, left, right) {
-    var pivot = items[Math.floor((right + left) / 2)], 
-        i = left, 
-        j = right; 
+    var pivot = items[Math.floor((right + left) / 2)],
+        i = left,
+        j = right;
     while (i <= j) {
         while (items[i].title < pivot.title) {
             i++;
@@ -71,7 +127,7 @@ function partition(items, left, right) {
             j--;
         }
         if (i <= j) {
-            swap(items, i, j); 
+            swap(items, i, j);
             i++;
             j--;
         }
@@ -81,11 +137,11 @@ function partition(items, left, right) {
 function quickSort(items, left, right) {
     var index;
     if (items.length > 1) {
-        index = partition(items, left, right); 
-        if (left < index - 1) { 
+        index = partition(items, left, right);
+        if (left < index - 1) {
             quickSort(items, left, index - 1);
         }
-        if (index < right) { 
+        if (index < right) {
             quickSort(items, index, right);
         }
     }
@@ -97,21 +153,22 @@ closeIcon.addEventListener("click", () => {
     popupBox.classList.remove("show");
     document.querySelector("body").style.overflow = "auto";
 });
-function showNotes(list) {
-    if (!list) {
-        if (!notes) return;
-        list = notes;
-    };
+function showNotes() {
+
     document.querySelectorAll(".note").forEach(li => li.remove());
-    list.forEach((note, id) => {
+    notes.forEach((note, id) => {
         let filterDesc = note.description.replaceAll("\n", '<br/>');
+        let currentDate = new Date(),
+            month = months[currentDate.getMonth()],
+            day = currentDate.getDate(),
+            year = currentDate.getFullYear();
         let liTag = `<li class="note">
                         <div class="details">
                             <p>${note.title}</p>
                             <span>${filterDesc}</span>
                         </div>
                         <div class="bottom-content">
-                            <span>${note.date} ${note.time}</span>
+                            <span>${month} ${day}, ${year} ${currentDate.getHours()}:${currentDate.getMinutes()}:${currentDate.getSeconds()}</span>
                             <div class="settings">
                                 <i onclick="showMenu(this)" class="uil uil-ellipsis-h"></i>
                                 <ul class="menu">
@@ -124,7 +181,6 @@ function showNotes(list) {
         addBox.insertAdjacentHTML("afterend", liTag);
     });
 }
-showNotes();
 function showMenu(elem) {
     elem.parentElement.classList.add("show");
     document.addEventListener("click", e => {
@@ -136,8 +192,7 @@ function showMenu(elem) {
 function deleteNote(noteId) {
     let confirmDel = confirm("Ви впевнені, що хочете видалити цю нотатку?");
     if (!confirmDel) return;
-    notes.splice(noteId, 1);
-    localStorage.setItem("notes", JSON.stringify(notes));
+    deleteNoteData(noteId)
     showNotes();
 }
 function updateNote(noteId, title, filterDesc) {
@@ -155,19 +210,16 @@ addBtn.addEventListener("click", e => {
     let title = titleTag.value.trim(),
         description = descTag.value.trim();
     if (title || description) {
-        let currentDate = new Date(),
-            month = months[currentDate.getMonth()],
-            day = currentDate.getDate(),
-            year = currentDate.getFullYear();
-        let noteInfo = { title, description, date: `${month} ${day}, ${year}`, time: `${currentDate.getHours()}:${currentDate.getMinutes()}:${currentDate.getSeconds()}` }
+        let currentDate = new Date();
+        let noteInfo = { title, description, date: currentDate }
         if (!isUpdate) {
-            notes.push(noteInfo);
+            saveNoteData(noteInfo);
         } else {
             isUpdate = false;
+            updateNoteData(updateId, noteInfo);
+            noteInfo.id = notes[updateId].id;
             notes[updateId] = noteInfo;
         }
-        localStorage.setItem("notes", JSON.stringify(notes));
-        showNotes();
         closeIcon.click();
     }
 });
@@ -176,7 +228,7 @@ inputBox.onkeyup = (e) => {
     updateSearch(e.target.value)
 }
 function updateSearch(e) {
-    let userData = e; 
+    let userData = e;
     let emptyArray = [];
     if (userData) {
         emptyArray = notes.filter((data) => {
@@ -191,4 +243,7 @@ function updateSearch(e) {
     }
 }
 
-
+function init() {
+    fetchNotes();
+}
+init();
